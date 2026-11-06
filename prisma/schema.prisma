@@ -1,0 +1,396 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ContentProgressStatus {
+  NOT_VIEWED
+  OPENED
+  VIEWING
+  IN_PROGRESS
+  INCOMPLETE
+  COMPLETED
+}
+
+enum TestAttemptStatus {
+  NOT_OPENED
+  OPENED
+  IN_PROGRESS
+  INCOMPLETE
+  COMPLETED
+  EXPIRED
+}
+
+enum TestType {
+  JLPT_MOCK
+  KANJI_TEST
+  VOCABULARY_TEST
+  COMBINED_TEST
+  DAILY_VOCAB_TEST
+}
+
+enum TransactionType {
+  DAILY_LOGIN
+  DAILY_VOCAB_COMPLETE
+  SYSTEM_KANJI_BATCH_5
+  TEST_COMPLETION
+  TEST_SCORE_BONUS
+  AI_SENTENCE_DEDUCT
+  AI_SENTENCE_REFUND
+  AI_SENTENCE_REWARD
+  ADMIN_ADJUSTMENT
+}
+
+enum TransactionSource {
+  SYSTEM
+  TEST
+  AI
+  VOCAB
+  KANJI
+  ADMIN
+}
+
+enum JLPTLevel {
+  N5
+  N4
+  N3
+}
+
+model Whitelist {
+  id          String    @id @default(uuid())
+  identifier  String    @unique
+  isUsed      Boolean   @default(false)
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+  createdById String?
+}
+
+model User {
+  id                  String                    @id @default(uuid())
+  username            String                    @unique
+  email               String                    @unique
+  phone               String?                   @unique
+  passwordHash        String
+  avatar              String?
+  role                Role                      @default(USER)
+  isLocked            Boolean                   @default(false)
+  bambooBalance       Int                       @default(10)
+  lastLoginDate       DateTime?
+  streakCount         Int                       @default(0)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  userKanji           UserKanji[]
+  systemKanjiProgress UserKanjiProgress[]
+  customKanjiProgress UserCustomKanjiProgress[]
+  vocabProgress       UserVocabProgress[]
+  dailyVocabSets      DailyVocabSet[]
+  testAttempts        TestAttempt[]
+  bambooTransactions  BambooTransaction[]
+  sentenceSubmissions SentenceSubmission[]
+  adminLogs           AdminLog[]                @relation("AdminActionBy")
+  targetLogs          AdminLog[]                @relation("TargetUser")
+
+  @@index([email])
+  @@index([role])
+}
+
+model SystemKanji {
+  id             String              @id @default(uuid())
+  kanji          String              @unique
+  hanViet        String
+  meaningVi      String
+  onyomi         String
+  kunyomi        String
+  strokeCount    Int
+  radical        String
+  strokeOrderSvg String?             @db.Text
+  readings       String
+  compounds      Json
+  exampleJa      String
+  exampleVi      String
+  level          JLPTLevel           @default(N5)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  progress       UserKanjiProgress[]
+
+  @@index([level])
+}
+
+model UserKanji {
+  id             String                    @id @default(uuid())
+  userId         String
+  kanji          String
+  hanViet        String
+  meaningVi      String
+  onyomi         String
+  kunyomi        String
+  strokeCount    Int?
+  radical        String?
+  strokeOrderSvg String?                   @db.Text
+  compounds      Json?
+  exampleJa      String?
+  exampleVi      String?
+  level          JLPTLevel                 @default(N5)
+  isDeleted      Boolean                   @default(false)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  user           User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  progress       UserCustomKanjiProgress[]
+
+  @@unique([userId, kanji])
+  @@index([userId, isDeleted])
+}
+
+model UserKanjiProgress {
+  id            String                @id @default(uuid())
+  userId        String
+  kanjiId       String
+  status        ContentProgressStatus @default(NOT_VIEWED)
+  firstOpenedAt DateTime?
+  lastOpenedAt  DateTime?
+  lastViewedAt  DateTime?
+  completedAt   DateTime?
+  rewardCounted Boolean               @default(false)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kanji         SystemKanji           @relation(fields: [kanjiId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kanjiId])
+  @@index([userId, status])
+  @@index([userId, rewardCounted])
+}
+
+model UserCustomKanjiProgress {
+  id            String                @id @default(uuid())
+  userId        String
+  userKanjiId   String
+  status        ContentProgressStatus @default(NOT_VIEWED)
+  firstOpenedAt DateTime?
+  lastOpenedAt  DateTime?
+  lastViewedAt  DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userKanji     UserKanji             @relation(fields: [userKanjiId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, userKanjiId])
+  @@index([userId, status])
+}
+
+model Vocabulary {
+  id           String              @id @default(uuid())
+  kanji        String?
+  hiragana     String
+  romaji       String?
+  meaningVi    String
+  partOfSpeech String
+  exampleJa    String
+  exampleVi    String
+  level        JLPTLevel           @default(N5)
+  topic        String              @default("General")
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  progress     UserVocabProgress[]
+  dailyItems   DailyVocabItem[]
+
+  @@index([level, topic])
+}
+
+model UserVocabProgress {
+  id            String                @id @default(uuid())
+  userId        String
+  vocabId       String
+  status        ContentProgressStatus @default(NOT_VIEWED)
+  firstOpenedAt DateTime?
+  lastOpenedAt  DateTime?
+  lastViewedAt  DateTime?
+  completedAt   DateTime?
+  viewCount     Int                   @default(0)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vocab         Vocabulary            @relation(fields: [vocabId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vocabId])
+  @@index([userId, status])
+}
+
+model DailyVocabSet {
+  id          String           @id @default(uuid())
+  userId      String
+  dateString  String
+  level       JLPTLevel
+  isCompleted Boolean          @default(false)
+  completedAt DateTime?
+  createdAt   DateTime         @default(now())
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       DailyVocabItem[]
+
+  @@unique([userId, dateString, level])
+}
+
+model DailyVocabItem {
+  id       String        @id @default(uuid())
+  setId    String
+  vocabId  String
+  isViewed Boolean       @default(false)
+  viewedAt DateTime?
+
+  set      DailyVocabSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  vocab    Vocabulary    @relation(fields: [vocabId], references: [id], onDelete: Cascade)
+
+  @@unique([setId, vocabId])
+}
+
+model Test {
+  id          String         @id @default(uuid())
+  title       String
+  type        TestType
+  level       JLPTLevel
+  timeLimit   Int
+  maxScore    Int
+  passScore   Int
+  isPublished Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  questions   TestQuestion[]
+  attempts    TestAttempt[]
+
+  @@index([type, level, isPublished])
+}
+
+model TestQuestion {
+  id                String       @id @default(uuid())
+  testId            String
+  questionText      String
+  section           String
+  points            Int          @default(1)
+  orderIndex        Int
+  questionType      String
+  options           Json
+  correctAnswer     String
+  acceptableAnswers Json?
+  explanation       String?
+
+  test              Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  answers           TestAnswer[]
+
+  @@index([testId, orderIndex])
+}
+
+model TestAttempt {
+  id             String            @id @default(uuid())
+  userId         String
+  testId         String
+  status         TestAttemptStatus @default(NOT_OPENED)
+  scoreTotal     Int               @default(0)
+  scoreBreakdown Json?
+  startedAt      DateTime?
+  submittedAt    DateTime?
+  expiresAt      DateTime?
+  isRewarded     Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  test           Test              @relation(fields: [testId], references: [id], onDelete: Cascade)
+  answers        TestAnswer[]
+
+  @@index([userId, testId, status])
+}
+
+model TestAnswer {
+  id           String       @id @default(uuid())
+  attemptId    String
+  questionId   String
+  userResponse String?
+  isCorrect    Boolean      @default(false)
+  scoreEarned  Int          @default(0)
+  createdAt    DateTime     @default(now())
+
+  attempt      TestAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question     TestQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+}
+
+model SentenceSubmission {
+  id              String   @id @default(uuid())
+  userId          String
+  originalText    String   @db.Text
+  normalizedText  String   @db.Text
+  contentHash     String
+  idempotencyKey  String   @unique
+  correctedText   String?  @db.Text
+  errorLocations  Json?
+  errorType       String?
+  explanationVi   String?  @db.Text
+  naturalVariants Json?
+  similarExamples Json?
+  overallReview   String?  @db.Text
+  isValidJapanese Boolean  @default(false)
+  isRewarded      Boolean  @default(false)
+  feeCharged      Int      @default(2)
+  rewardAmount    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, contentHash])
+  @@index([userId, createdAt])
+}
+
+model BambooTransaction {
+  id              String            @id @default(uuid())
+  userId          String
+  type            TransactionType
+  amount          Int
+  balanceBefore   Int
+  balanceAfter    Int
+  source          TransactionSource
+  relatedEntityId String?
+  idempotencyKey  String?           @unique
+  createdAt       DateTime          @default(now())
+
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([type])
+  @@index([source])
+}
+
+model AdminLog {
+  id           String   @id @default(uuid())
+  adminId      String
+  targetUserId String?
+  action       String
+  reason       String   @db.Text
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  admin        User     @relation("AdminActionBy", fields: [adminId], references: [id], onDelete: Cascade)
+  targetUser   User?    @relation("TargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([adminId, createdAt])
+  @@index([targetUserId, createdAt])
+}
