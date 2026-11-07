@@ -5,12 +5,14 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { KanjiModule } from './modules/kanji/kanji.module'; // <-- Thêm dòng này
+import { ProgressModule } from './progress/progress.module';
 
 @Module({
   imports: [
-    PrismaModule, 
-    AuthModule, 
-    KanjiModule // <-- Thêm vào đây
+    PrismaModule,
+    AuthModule,
+    KanjiModule,
+    ProgressModule,
   ],
   controllers: [AppController],
   providers: [AppService],

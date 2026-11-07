@@ -65,6 +65,23 @@ enum JLPTLevel {
   N3
 }
 
+enum SelfReview {
+  UNRATED
+  UNDERSTOOD
+  NEEDS_REVIEW
+}
+
+enum ActivityType {
+  OPEN_KANJI
+  OPEN_VOCAB
+  COMPLETE_KANJI
+  COMPLETE_VOCAB
+  REVIEW_MARK
+  OPEN_TEST
+  COMPLETE_TEST
+  DAILY_LOGIN
+}
+
 model Whitelist {
   id          String    @id @default(uuid())
   identifier  String    @unique
@@ -99,6 +116,7 @@ model User {
   sentenceSubmissions SentenceSubmission[]
   adminLogs           AdminLog[]                @relation("AdminActionBy")
   targetLogs          AdminLog[]                @relation("TargetUser")
+  activityLogs        ActivityLog[]
 
   @@index([email])
   @@index([role])
@@ -162,6 +180,8 @@ model UserKanjiProgress {
   lastOpenedAt  DateTime?
   lastViewedAt  DateTime?
   completedAt   DateTime?
+  selfReview    SelfReview            @default(UNRATED)
+  reviewedAt    DateTime?
   rewardCounted Boolean               @default(false)
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
@@ -171,6 +191,7 @@ model UserKanjiProgress {
 
   @@unique([userId, kanjiId])
   @@index([userId, status])
+  @@index([userId, selfReview])
   @@index([userId, rewardCounted])
 }
 
@@ -183,6 +204,8 @@ model UserCustomKanjiProgress {
   lastOpenedAt  DateTime?
   lastViewedAt  DateTime?
   completedAt   DateTime?
+  selfReview    SelfReview            @default(UNRATED)
+  reviewedAt    DateTime?
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 
@@ -191,6 +214,7 @@ model UserCustomKanjiProgress {
 
   @@unique([userId, userKanjiId])
   @@index([userId, status])
+  @@index([userId, selfReview])
 }
 
 model Vocabulary {
@@ -222,6 +246,8 @@ model UserVocabProgress {
   lastOpenedAt  DateTime?
   lastViewedAt  DateTime?
   completedAt   DateTime?
+  selfReview    SelfReview            @default(UNRATED)
+  reviewedAt    DateTime?
   viewCount     Int                   @default(0)
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
@@ -231,6 +257,7 @@ model UserVocabProgress {
 
   @@unique([userId, vocabId])
   @@index([userId, status])
+  @@index([userId, selfReview])
 }
 
 model DailyVocabSet {
@@ -393,4 +420,17 @@ model AdminLog {
 
   @@index([adminId, createdAt])
   @@index([targetUserId, createdAt])
+}
+
+model ActivityLog {
+  id        String       @id @default(uuid())
+  userId    String
+  type      ActivityType
+  label     String
+  refId     String?
+  createdAt DateTime     @default(now())
+
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
